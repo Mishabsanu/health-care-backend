@@ -19,7 +19,7 @@ const PORT = process.env.PORT || 5000;
 app.use(express.json());
 app.use(cookieParser());
 app.use(cors({
-  origin: ["https://akod-care.vercel.app", "http://localhost:3000"],
+  origin: ["https://health-care-umber-five.vercel.app", "http://localhost:3000"],
   credentials: true
 }));
 
