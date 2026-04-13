@@ -27,7 +27,7 @@ export const sendWhatsAppMessage = async ({ phone, template, data }) => {
                 message = `🏥 Welcome to PCMS Clinical Care, ${data.name}! Thank you for choosing us. Your Patient ID is: ${data.patientId}. Your registration is complete. Please book your first clinical appointment at your earliest convenience to start your recovery journey.`;
                 break;
             case 'BOOKING':
-                message = `📅 Appointment Confirmed! Hi ${data.name}, your session is booked for ${data.date} at ${data.time}. See you soon!`;
+                message = `📅 Appointment Scheduled! Hi ${data.name}, your clinical session is scheduled for ${data.date} at ${data.time}. Please arrive 10 minutes early.`;
                 break;
             case 'REMINDER':
                 message = `🔔 Kind Reminder: Hi ${data.name}, you have a clinical session scheduled for tomorrow (${data.date}) at ${data.time}.`;

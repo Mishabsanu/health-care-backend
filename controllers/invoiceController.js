@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import Invoice from '../models/Invoice.js';
 import Inventory from '../models/Inventory.js';
+import Appointment from '../models/Appointment.js';
 
 // @desc    Retrieve Clinical Invoices
 // @route   GET /api/invoices
@@ -66,18 +67,44 @@ export const getInvoices = async (req, res) => {
     res.status(500).json({ message: 'Internal Server Error' });
   }
 };
+// @desc    Retrieve Single Clinical Invoice
+// @route   GET /api/invoices/:id
+export const getInvoiceById = async (req, res) => {
+  try {
+    const invoice = await Invoice.findById(req.params.id)
+      .populate('patientId', 'name phone patientId')
+      .populate('createdBy', 'name');
+    
+    if (!invoice) {
+        return res.status(404).json({ message: '🚫 Invoice Not Found.' });
+    }
+    
+    res.json(invoice);
+  } catch (err) {
+    console.error('🚫 Ledger Error | Detail Fetch Failure:', err);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+};
 
 // @desc    Register New Clinical Invoice
 // @route   POST /api/invoices
 export const createInvoice = async (req, res) => {
   try {
+    const { items, discount = 0, tax = 0, appointmentId } = req.body;
 
-    // 1. Generate Clinical Invoice ID
-    const count = await Invoice.countDocuments();
+    // 🎯 Step 0: Appointment Validation | Prevent Double Billing
+    if (appointmentId) {
+      const existingBill = await Invoice.findOne({ appointmentId });
+      if (existingBill) {
+        return res.status(400).json({ message: '🚫 Financial Error | This appointment already has a registered bill.' });
+      }
+    }
+
+    // 1. Generate Clinical Bill ID (Simplified Registry Number)
+    const lastBill = await Invoice.findOne().sort({ createdAt: -1 });
+    const count = lastBill ? await Invoice.countDocuments() : 0;
     const year = new Date().getFullYear();
-    const invoiceId = `INV-${year}-${(count + 1).toString().padStart(4, '0')}`;
-
-    const { items, discount = 0, tax = 0 } = req.body;
+    const billNo = `BILL-${year}-${(count + 1).toString().padStart(4, '0')}`;
 
     // 2. Clinical Validation | Ensure Ledger Integrity
     if (!items || !Array.isArray(items) || items.length === 0) {
@@ -105,7 +132,9 @@ export const createInvoice = async (req, res) => {
 
     const invoiceData = {
       ...req.body,
-      id: invoiceId,
+      id: billNo,
+      patientId: req.body.patientId === '' ? undefined : req.body.patientId,
+      appointmentId: req.body.appointmentId === '' ? undefined : req.body.appointmentId,
       items: sanitizedItems,
       subtotal,
       amount,
@@ -114,7 +143,15 @@ export const createInvoice = async (req, res) => {
 
     const invoice = await Invoice.create(invoiceData);
 
-    // 4. Clinical Sync | Adjust Inventory Stock Levels
+    // 🎯 Step 5: Clinical Registry Sync | Link Bill to Appointment
+    if (appointmentId) {
+      await Appointment.findByIdAndUpdate(appointmentId, {
+        isBilled: true,
+        billId: invoice._id
+      });
+    }
+
+    // 6. Clinical Sync | Adjust Inventory Stock Levels
     const inventoryUpdates = items?.filter(item => item.inventoryId)
         ?.map(item =>
           Inventory.findByIdAndUpdate(item.inventoryId, {

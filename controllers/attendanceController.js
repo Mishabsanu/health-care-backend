@@ -63,17 +63,67 @@ export const recordCheckOut = async (req, res) => {
   }
 };
 
-// @desc    Get All Operational Statuses (Global Registry)
+// @desc    Get Filtered Operational Registry
 // @route   GET /api/attendance
 export const getAttendance = async (req, res) => {
   try {
-    const attendance = await Attendance.find({})
+    const { month, year, staffId } = req.query;
+    let query = {};
+
+    if (staffId) query.staffId = staffId;
+    if (month && year) {
+        const start = new Date(year, month - 1, 1);
+        const end = new Date(year, month, 0, 23, 59, 59);
+        query.checkIn = { $gte: start, $lte: end };
+    }
+
+    const attendance = await Attendance.find(query)
       .populate('staffId', 'name position')
       .sort({ checkIn: -1 });
 
     res.json(attendance);
   } catch (err) {
     res.status(500).json({ message: 'Internal Server Error' });
+  }
+};
+
+// @desc    Get Monthly Attendance Analytics
+// @route   GET /api/attendance/stats
+export const getAttendanceStats = async (req, res) => {
+  try {
+    const { month, year, staffId } = req.query;
+    if (!month || !year || !staffId) {
+      return res.status(400).json({ message: 'Month, Year, and Staff ID are required.' });
+    }
+
+    const start = new Date(year, month - 1, 1);
+    const end = new Date(year, month, 0, 23, 59, 59);
+
+    const records = await Attendance.find({
+      staffId,
+      checkIn: { $gte: start, $lte: end }
+    });
+
+    // 📊 Calculation Logic
+    const presentDays = new Array(...new Set(records.map(r => new Date(r.checkIn).toDateString()))).length;
+    let totalDurationMs = 0;
+    records.forEach(r => {
+      if (r.checkIn && r.checkOut) {
+        totalDurationMs += new Date(r.checkOut).getTime() - new Date(r.checkIn).getTime();
+      }
+    });
+
+    const totalHours = Math.floor(totalDurationMs / (1000 * 60 * 60));
+    const avgDurationHours = presentDays > 0 ? (totalHours / presentDays).toFixed(1) : 0;
+
+    res.json({
+      presentDays,
+      totalHours,
+      avgDurationHours,
+      totalRecords: records.length
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Stats calculation failed.' });
   }
 };
 
@@ -118,6 +168,7 @@ export const getOperationalStatus = async (req, res) => {
         .map(s => ({
           id: s.staffId?._id?.toString(),
           name: s.staffId?.name,
+          checkIn: s.checkIn,
           sessionId: s._id?.toString()
         }))
     });

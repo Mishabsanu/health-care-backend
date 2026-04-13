@@ -4,6 +4,7 @@ const invoiceSchema = new mongoose.Schema({
   id: { type: String, required: true }, // Clinical Invoice ID (e.g., INV-001)
   patientId: { type: mongoose.Schema.Types.ObjectId, ref: 'Patient', required: true },
   patientName: { type: String, required: true },
+  appointmentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Appointment' },
   date: { type: String, required: true }, // YYYY-MM-DD
   items: [
     {

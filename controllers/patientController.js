@@ -5,7 +5,7 @@ import { sendWhatsAppMessage } from '../services/whatsappService.js';
 // @route   GET /api/patients
 export const getPatients = async (req, res) => {
   try {
-    const { search, page = 1, limit = 10, status, gender } = req.query;
+    const { search, page = 1, limit = 10, gender } = req.query;
     // Base query
     let query = {};
 
@@ -18,7 +18,7 @@ export const getPatients = async (req, res) => {
       ];
     }
 
-    if (status) query.status = status;
+
     if (gender) query.gender = gender;
 
     const skip = (parseInt(page) - 1) * parseInt(limit);

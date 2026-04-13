@@ -7,54 +7,103 @@ import { sendWhatsAppMessage } from '../services/whatsappService.js';
 // @route   GET /api/appointments
 export const getAppointments = async (req, res) => {
   try {
-    const { search, page = 1, limit = 10, status } = req.query;
-    // Base query
-    let query = {};
+    const { search, page = 1, limit = 10, status, date, timeframe, localDate } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const limitInt = parseInt(limit);
 
-    if (status) query.status = status;
+    // 🎯 Stage 1: Initial Match (Clinical Timeframes)
+    let initialMatch = {};
+    if (status) initialMatch.status = status;
+    
+    // 🌐 Multi-Timezone Clinical Sync: Prioritize station date over server date
+    const todayStr = localDate || new Date().toISOString().split('T')[0];
 
-    let aggregateQuery = [
-      { $match: query },
-      { $lookup: { from: 'patients', localField: 'patientId', foreignField: '_id', as: 'patient' } },
-      { $unwind: { path: '$patient', preserveNullAndEmptyArrays: true } },
-      { $lookup: { from: 'doctors', localField: 'doctorId', foreignField: '_id', as: 'doctor' } },
-      { $unwind: { path: '$doctor', preserveNullAndEmptyArrays: true } }
+    if (timeframe === 'today') {
+        initialMatch.date = todayStr;
+    } else if (timeframe === 'upcoming') {
+        initialMatch.date = { $gt: todayStr };
+    } else if (date) {
+        initialMatch.date = date;
+    }
+
+    let pipeline = [
+      { $match: initialMatch },
+      // 🏥 Clinical Lookups
+      { $lookup: { from: 'patients', localField: 'patientId', foreignField: '_id', as: 'p' } },
+      { $unwind: { path: '$p', preserveNullAndEmptyArrays: true } },
+      { $lookup: { from: 'doctors', localField: 'doctorId', foreignField: '_id', as: 'd' } },
+      { $unwind: { path: '$d', preserveNullAndEmptyArrays: true } },
+      { $lookup: { from: 'users', localField: 'createdBy', foreignField: '_id', as: 'u' } },
+      { $unwind: { path: '$u', preserveNullAndEmptyArrays: true } }
     ];
 
+    // 🔍 Stage 2: Advanced Search (Related Collections)
     if (search) {
-      aggregateQuery.push({
+      pipeline.push({
         $match: {
           $or: [
-            { 'patient.name': { $regex: search, $options: 'i' } },
-            { 'doctor.name': { $regex: search, $options: 'i' } }
+            { 'p.name': { $regex: search, $options: 'i' } },
+            { 'p.phone': { $regex: search, $options: 'i' } },
+            { 'd.name': { $regex: search, $options: 'i' } },
+            { 'p.patientId': { $regex: search, $options: 'i' } }
           ]
         }
       });
     }
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    // 📊 Stage 3: Professional Faceting & Pagination
+    pipeline.push({
+      $facet: {
+        metadata: [{ $count: "total" }],
+        data: [
+          { $sort: { date: 1, time: 1 } },
+          { $skip: skip },
+          { $limit: limitInt },
+          {
+            $project: {
+              _id: 1,
+              date: 1,
+              time: 1,
+              status: 1,
+              isBilled: 1,
+              billId: 1,
+              createdAt: 1,
+              patientId: {
+                _id: '$p._id',
+                name: '$p.name',
+                phone: '$p.phone',
+                patientId: '$p.patientId'
+              },
+              doctorId: {
+                _id: '$d._id',
+                name: '$d.name',
+                specialization: '$d.specialization'
+              },
+              createdBy: {
+                _id: '$u._id',
+                name: '$u.name'
+              }
+            }
+          }
+        ]
+      }
+    });
 
-    // Get paginated data
-    aggregateQuery.push({ $sort: { createdAt: -1 } });
-    const total = await Appointment.countDocuments(query);
-
-    const appointments = await Appointment.find(query)
-      .populate('patientId', 'name phone email patientId')
-      .populate('doctorId', 'name specialization')
-      .populate('createdBy', 'name')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(parseInt(limit));
+    const result = await Appointment.aggregate(pipeline);
+    
+    // 📦 Clinical Packaging
+    const total = result[0]?.metadata[0]?.total || 0;
+    const appointments = result[0]?.data || [];
 
     res.json({
       data: appointments,
       total,
       page: parseInt(page),
-      pages: Math.ceil(total / parseInt(limit))
+      pages: Math.ceil(total / limitInt)
     });
   } catch (err) {
-    console.error('🚫 Registry Error | Backend Fetch:', err);
-    res.status(500).json({ message: 'Internal Server Error' });
+    console.error('🚫 Registry Sync Error:', err);
+    res.status(500).json({ message: 'Internal Server Error | Registry Sync Failed' });
   }
 };
 
@@ -91,7 +140,8 @@ export const createAppointment = async (req, res) => {
         data: {
           name: patient.name,
           date: appointment.date,
-          time: appointment.time
+          time: appointment.time,
+          status: 'Scheduled'
         }
       });
     }
