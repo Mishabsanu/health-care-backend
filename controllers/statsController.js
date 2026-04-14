@@ -135,11 +135,10 @@ export const getFinancialStats = async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
     const stringDateFilter = (startDate || endDate) ? buildStringDateQuery(startDate, endDate) : null;
-    const dateObjectFilter = (startDate || endDate) ? buildDateObjectQuery(startDate, endDate) : null;
 
     const [invoices, expenses] = await Promise.all([
       Invoice.find(stringDateFilter ? { date: stringDateFilter } : {}),
-      Expense.find(dateObjectFilter ? { createdAt: dateObjectFilter } : {})
+      Expense.find(stringDateFilter ? { date: stringDateFilter } : {})
     ]);
 
     const paidInvoices = invoices.filter(inv => inv.status === 'Paid');
@@ -147,26 +146,60 @@ export const getFinancialStats = async (req, res) => {
     const totalPending = invoices
       .filter(inv => inv.status !== 'Paid')
       .reduce((sum, inv) => sum + (inv.amount || 0), 0);
+    
     const totalExpenses = expenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
     const totalProfit = totalRevenue - totalExpenses;
+    const profitMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
 
+    // Revenue Trends (Normalized by Date)
     const revenueTrends = invoices.reduce((acc, inv) => {
       const key = inv.date;
       acc[key] = (acc[key] || 0) + (inv.amount || 0);
       return acc;
     }, {});
 
+    // Expense Trends (Normalized by Date)
+    const expenseTrends = expenses.reduce((acc, exp) => {
+      const key = exp.date;
+      acc[key] = (acc[key] || 0) + (exp.amount || 0);
+      return acc;
+    }, {});
+
+    // Category Breakdown (Expenses)
+    const categoryBreakdown = expenses.reduce((acc, exp) => {
+      acc[exp.category] = (acc[exp.category] || 0) + (exp.amount || 0);
+      return acc;
+    }, {});
+
+    // Combine trends into a unified format for multi-layer charts
+    const allDates = Array.from(new Set([...Object.keys(revenueTrends), ...Object.keys(expenseTrends)]))
+      .sort((a, b) => a.localeCompare(b));
+
+    const combinedTrends = allDates.map(date => ({
+      name: date,
+      revenue: revenueTrends[date] || 0,
+      expense: expenseTrends[date] || 0,
+      profit: (revenueTrends[date] || 0) - (expenseTrends[date] || 0)
+    }));
+
     res.json({
-      summary: { totalRevenue, totalPending, totalExpenses, totalProfit },
-      trends: Object.entries(revenueTrends)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([name, value]) => ({ name, value })),
+      summary: { 
+        totalRevenue, 
+        totalPending, 
+        totalExpenses, 
+        totalProfit,
+        profitMargin: parseFloat(profitMargin.toFixed(1)),
+        avgRevenuePerDay: allDates.length > 0 ? totalRevenue / allDates.length : 0
+      },
+      trends: combinedTrends,
+      categoryBreakdown: Object.entries(categoryBreakdown).map(([name, value]) => ({ name, value }))
     });
   } catch (err) {
     console.error('🚫 Financial Stats Error:', err);
     res.status(500).json({ message: 'Financial API Error' });
   }
 };
+
 
 // @route   GET /api/stats/appointments
 export const getAppointmentStats = async (req, res) => {
@@ -232,13 +265,22 @@ export const getInventoryStats = async (req, res) => {
 // @route   GET /api/stats/attendance
 export const getAttendanceStats = async (req, res) => {
   try {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    const { startDate, endDate } = req.query;
+    
+    // Default to today if no dates provided
+    let filter = {};
+    if (startDate || endDate) {
+      filter = buildDateObjectQuery(startDate, endDate);
+    } else {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      filter = { $gte: today, $lt: tomorrow };
+    }
 
     const activeAttendance = await Attendance.find({
-      checkIn: { $gte: today, $lt: tomorrow }
+      checkIn: filter
     }).populate('staffId', 'name role');
 
     const statusCounts = activeAttendance.reduce((acc, log) => {
