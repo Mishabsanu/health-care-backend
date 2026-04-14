@@ -40,19 +40,47 @@ export const getPayrollRegistry = async (req, res) => {
     staff = staff.slice(skip, skip + parseInt(limit));
 
     const registry = await Promise.all(staff?.map(async (member) => {
-      // 2. Attendance Metrics | Days Worked IN PERIOD
-      const workedDays = await Attendance.countDocuments({
+      // 2. Attendance Metrics | Duration & Days Worked
+      const logs = await Attendance.find({
         staffId: member._id,
         checkIn: { $gte: startDate, $lte: endDate },
         status: { $in: ['Present', 'Open', 'Closed'] }
       });
 
-      // 3. Tenure Metrics | Days Since Joining (Total)
+      const workedDays = new Set(logs.map(l => new Date(l.checkIn).toDateString())).size;
+      
+      let totalHours = 0;
+      let totalOvertimeHours = 0;
+      const expectedHours = member.salaryConfig?.expectedHoursPerDay || 8;
+
+      logs.forEach(log => {
+        if (log.checkIn && log.checkOut) {
+          const durationHrs = (new Date(log.checkOut).getTime() - new Date(log.checkIn).getTime()) / (1000 * 60 * 60);
+          totalHours += Math.min(durationHrs, expectedHours);
+          totalOvertimeHours += Math.max(0, durationHrs - expectedHours);
+        }
+      });
+
+      // 3. Dynamic Salary Calculation
+      const config = member.salaryConfig || {};
+      let calculatedNetSalary = 0;
+
+      if (config.type === 'Hourly') {
+        const basePay = totalHours * (config.rate || 0);
+        const otPay = totalOvertimeHours * (config.overtimeRate || (config.rate || 0) * 1.5);
+        calculatedNetSalary = basePay + otPay;
+      } else if (config.type === 'Daily') {
+        calculatedNetSalary = workedDays * (config.rate || 0);
+      } else {
+        // Fixed Monthly
+        calculatedNetSalary = (member.salaryDetails?.basicSalary || 0) + (member.salaryDetails?.allowance || 0) - (member.salaryDetails?.deduction || 0);
+      }
+
+      // 4. Tenure Metrics
       const joinDate = member.joinDate || member.createdAt;
       const tenureDays = Math.floor((new Date() - new Date(joinDate)) / (1000 * 60 * 60 * 24));
 
-      // 4. Payment History | PERIOD Status
-      // Look for any Salary expense linked to this staff member within the target YYYY-MM
+      // 5. Payment Status Period-Specific
       const periodPayment = await Expense.findOne({
         staffId: member._id,
         category: 'Salaries',
@@ -66,7 +94,13 @@ export const getPayrollRegistry = async (req, res) => {
         joinDate: joinDate,
         tenureDays: tenureDays > 0 ? tenureDays : 0,
         workedDays,
-        salaryDetails: member.salaryDetails,
+        totalHours: parseFloat(totalHours.toFixed(2)),
+        overtimeHours: parseFloat(totalOvertimeHours.toFixed(2)),
+        salaryDetails: {
+          ...member.salaryDetails,
+          netSalary: parseFloat(calculatedNetSalary.toFixed(2))
+        },
+        salaryConfig: config,
         bankDetails: {
           bankName: member.bankName,
           accountNumber: member.accountNumber ? `****${member.accountNumber.slice(-4)}` : 'Not Set'

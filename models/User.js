@@ -25,6 +25,12 @@ const userSchema = new mongoose.Schema({
     allowance: { type: Number, default: 0 },
     deduction: { type: Number, default: 0 },
     netSalary: { type: Number, default: 0 }
+  },
+  salaryConfig: {
+    type: { type: String, enum: ['Monthly', 'Daily', 'Hourly'], default: 'Monthly' },
+    rate: { type: Number, default: 0 }, // Daily rate or Hourly rate
+    expectedHoursPerDay: { type: Number, default: 8 },
+    overtimeRate: { type: Number, default: 0 } // Extra per hour
   }
 }, { timestamps: true });
 

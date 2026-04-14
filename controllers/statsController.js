@@ -106,6 +106,13 @@ export const getDashboardStats = async (req, res) => {
       return acc;
     }, {});
 
+    // 👨‍⚕️ Specialist Workload (Doctor-wise volume)
+    const doctorWorkload = filteredAppointments.reduce((acc, app) => {
+      const name = app.doctorName || 'Unassigned';
+      acc[name] = (acc[name] || 0) + 1;
+      return acc;
+    }, {});
+
     res.json({
       summary: {
         totalPatients,
@@ -122,7 +129,10 @@ export const getDashboardStats = async (req, res) => {
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([name, value]) => ({ name, value })),
       distribution: Object.entries(appointmentDistribution)
-        .map(([status, count]) => ({ status, count }))
+        .map(([status, count]) => ({ status, count })),
+      doctorWorkload: Object.entries(doctorWorkload)
+        .sort((a, b) => b[1] - a[1]) // Sort by volume descending
+        .map(([name, count]) => ({ name, count }))
     });
   } catch (err) {
     console.error('🚫 Dashboard Stats Error:', err);
