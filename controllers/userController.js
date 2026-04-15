@@ -73,7 +73,7 @@ export const updateUser = async (req, res) => {
     const { 
         name, email, role, status,
         panCard, adharCard, accountNumber, ifscCode, bankName, joinDate,
-        salaryDetails 
+        salaryDetails, salaryConfig
     } = req.body;
 
     // Recalculate Net Salary
@@ -85,7 +85,8 @@ export const updateUser = async (req, res) => {
     const updateData = { 
         name, email, role, status,
         panCard, adharCard, accountNumber, ifscCode, bankName, joinDate,
-        salaryDetails: salaryDetails ? { ...salaryDetails, netSalary } : undefined
+        salaryDetails: salaryDetails ? { ...salaryDetails, netSalary } : undefined,
+        salaryConfig
     };
     
     const user = await User.findByIdAndUpdate(

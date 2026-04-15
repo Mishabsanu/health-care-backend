@@ -23,8 +23,16 @@ const invoiceSchema = new mongoose.Schema({
   amount: { type: Number, required: true }, // Final Total
   paidAmount: { type: Number, default: 0 },
   balanceAmount: { type: Number, default: 0 },
+  payments: [
+    {
+      date: { type: String, required: true },
+      amount: { type: Number, required: true },
+      method: { type: String, enum: ['UPI', 'Cash', 'Card', 'Insurance'], default: 'Cash' },
+      note: { type: String }
+    }
+  ],
   method: { type: String, enum: ['UPI', 'Cash', 'Card', 'Insurance'] },
-  status: { type: String, enum: ['Paid', 'Unpaid', 'Partially Paid'], default: 'Unpaid' },
+  status: { type: String, enum: ['Paid', 'Unpaid', 'Partially Paid', 'Advance'], default: 'Unpaid' },
   description: { type: String },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 }, { timestamps: true });

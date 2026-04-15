@@ -126,7 +126,9 @@ export const createInvoice = async (req, res) => {
     
     // Auto-update status based on clinical threshold
     let status = req.body.status || 'Unpaid';
-    if (paidAmount >= amount) {
+    if (paidAmount > amount) {
+      status = 'Advance';
+    } else if (paidAmount === amount && amount > 0) {
       status = 'Paid';
     } else if (paidAmount > 0) {
       status = 'Partially Paid';
@@ -148,6 +150,12 @@ export const createInvoice = async (req, res) => {
       amount,
       paidAmount,
       balanceAmount,
+      payments: paidAmount > 0 ? [{
+        date: req.body.date || new Date().toISOString().split('T')[0],
+        amount: paidAmount,
+        method: req.body.method || 'Cash',
+        note: req.body.paymentNote || 'Initial payment'
+      }] : [],
       status,
       createdBy: req.user?.id
     };
@@ -196,19 +204,40 @@ export const updateInvoice = async (req, res) => {
 
     const updateData = { ...req.body };
 
-    // If updating payment, recalculate balance and status
-    if (typeof req.body.paidAmount !== 'undefined') {
-      const amount = updateData.amount || existing.amount;
-      const paid = updateData.paidAmount;
-      updateData.balanceAmount = amount - paid;
-      
-      if (paid >= amount) {
-        updateData.status = 'Paid';
-      } else if (paid > 0) {
-        updateData.status = 'Partially Paid';
-      } else {
-        updateData.status = 'Unpaid';
-      }
+    // 🎯 Step 1: Recalculate Totals if Items/Discount are provided
+    if (req.body.items || typeof req.body.discount !== 'undefined') {
+        const items = req.body.items || existing.items;
+        const discount = typeof req.body.discount !== 'undefined' ? Number(req.body.discount) : existing.discount;
+        const tax = typeof req.body.tax !== 'undefined' ? Number(req.body.tax) : existing.tax;
+
+        const subtotal = items.reduce((sum, item) => sum + (item.price * (item.quantity || 1)), 0);
+        const amount = (subtotal - discount) + tax;
+
+        updateData.subtotal = subtotal;
+        updateData.amount = amount;
+        
+        // Sanitize items
+        updateData.items = items.map(item => ({
+            ...item,
+            serviceId: item.serviceId === '' ? undefined : item.serviceId,
+            inventoryId: item.inventoryId === '' ? undefined : item.inventoryId
+        }));
+    }
+
+    // 🎯 Step 2: Synchronize Balance | [New Amount] - [Existing Paid]
+    const finalAmount = typeof updateData.amount !== 'undefined' ? updateData.amount : existing.amount;
+    const currentPaid = existing.paidAmount || 0;
+    updateData.balanceAmount = finalAmount - currentPaid;
+
+    // 🎯 Step 3: Auto-Status Transition
+    if (currentPaid > finalAmount) {
+      updateData.status = 'Advance';
+    } else if (currentPaid === finalAmount && finalAmount > 0) {
+      updateData.status = 'Paid';
+    } else if (currentPaid > 0) {
+      updateData.status = 'Partially Paid';
+    } else {
+      updateData.status = 'Unpaid';
     }
 
     const invoice = await Invoice.findByIdAndUpdate(req.params.id, updateData, { new: true })
@@ -216,7 +245,51 @@ export const updateInvoice = async (req, res) => {
       .populate('createdBy', 'name');
     res.json(invoice);
   } catch (err) {
-    res.status(400).json({ message: '🚫 Financial Error | Modification failed.' });
+    console.error('🚫 Ledger Update Error:', err);
+    res.status(400).json({ message: '🚫 Financial Error | Modification failed.', details: err.message });
+  }
+};
+
+// @desc    Record Additional Payment for Invoice
+// @route   POST /api/invoices/:id/payments
+export const recordPayment = async (req, res) => {
+  try {
+    const { amount, method, date, note } = req.body;
+    const invoice = await Invoice.findById(req.params.id);
+
+    if (!invoice) return res.status(404).json({ message: '🚫 Invoice Not Found.' });
+
+    // 1. Add to Payment Log
+    const newPayment = {
+      amount: Number(amount),
+      method,
+      date: date || new Date().toISOString().split('T')[0],
+      note
+    };
+
+    invoice.payments.push(newPayment);
+
+    // 2. Recalculate Financials
+    invoice.paidAmount = invoice.payments.reduce((sum, p) => sum + p.amount, 0);
+    invoice.balanceAmount = invoice.amount - invoice.paidAmount;
+
+    // 3. Update Status
+    if (invoice.paidAmount > invoice.amount) {
+      invoice.status = 'Advance';
+    } else if (invoice.paidAmount === invoice.amount) {
+      invoice.status = 'Paid';
+    } else if (invoice.paidAmount > 0) {
+      invoice.status = 'Partially Paid';
+    } else {
+      invoice.status = 'Unpaid';
+    }
+
+    await invoice.save();
+
+    res.json(invoice);
+  } catch (err) {
+    console.error('🚫 Ledger Error | Payment Entry Failed:', err);
+    res.status(400).json({ message: '🚫 Financial Error | Payment could not be recorded.' });
   }
 };
 
