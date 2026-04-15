@@ -6,7 +6,7 @@ const inventorySchema = new mongoose.Schema({
   category: { 
     type: String, 
     required: true,
-    enum: ['Equipment', 'Consumables', 'Medicines', 'Stationery', 'Others']
+    enum: ['Products','Equipment', 'Consumables', 'Medicines', 'Stationery', 'Others']
   },
   quantity: { type: Number, default: 0 },
   unit: { type: String, required: true }, // e.g., pcs, boxes, ml
@@ -20,8 +20,10 @@ const inventorySchema = new mongoose.Schema({
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 }, { timestamps: true });
 
-// Optimize for inventory management
+// Optimize for inventory management & financial reporting
 inventorySchema.index({ name: 1 });
 inventorySchema.index({ quantity: 1 });
+inventorySchema.index({ category: 1 });
+inventorySchema.index({ totalSold: -1 });
 
 export default mongoose.model('Inventory', inventorySchema);

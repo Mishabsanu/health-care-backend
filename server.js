@@ -46,6 +46,7 @@ import attendanceRoutes from './routes/attendanceRoutes.js';
 import expenseRoutes from './routes/expenseRoutes.js';
 import inventoryRoutes from './routes/inventoryRoutes.js';
 import payrollRoutes from './routes/payrollRoutes.js';
+import uploadRoutes from './routes/uploadRoutes.js';
 
 // -------------------------------------------------------------------
 // ROUTES | Modular Clinical Endpoints
@@ -62,6 +63,7 @@ app.use('/api/invoices', invoiceRoutes);
 app.use('/api/expenses', expenseRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/payroll', payrollRoutes);
+app.use('/api/upload', uploadRoutes);
 app.use('/api/stats', statsRoutes);
 
 app.get('/', (req, res) => {

@@ -18,7 +18,9 @@ export const getExpenses = async (req, res) => {
     if (search) {
       query.$or = [
         { description: { $regex: search, $options: 'i' } },
-        { id: { $regex: search, $options: 'i' } }
+        { id: { $regex: search, $options: 'i' } },
+        { supplierName: { $regex: search, $options: 'i' } },
+        { invoiceNumber: { $regex: search, $options: 'i' } }
       ];
     }
 
@@ -61,10 +63,9 @@ export const createExpense = async (req, res) => {
   try {
     const { category, staffId } = req.body;
 
-    // Generate Expense ID
+    // Generate Expense ID (Professional Format: EXP-XXXX)
     const count = await Expense.countDocuments();
-    const year = new Date().getFullYear();
-    const expenseId = `EXP-${year}-${(count + 1).toString().padStart(4, '0')}`;
+    const expenseId = `EXP-${(count + 1).toString().padStart(4, '0')}`;
 
     const expense = await Expense.create({
       ...req.body,

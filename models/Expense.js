@@ -9,11 +9,14 @@ const expenseSchema = new mongoose.Schema({
     required: true,
     enum: ['Rent', 'Salaries', 'Supplies', 'Utilities', 'Maintenance', 'Marketing', 'Others']
   },
+  supplierName: { type: String, required: true },
+  invoiceNumber: { type: String }, // Optional
+  documentUrl: { type: String }, // Cloudinary link
   description: { type: String },
   staffId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Optional: Link salary payments to specific staff
   paymentMethod: { 
     type: String, 
-    enum: ['UPI', 'Cash', 'Card', 'Bank Transfer'],
+    enum: ['UPI', 'Cash', 'Card', 'Bank Transfer', 'CHEQUE'],
     default: 'Cash'
   },
   status: { 
@@ -27,5 +30,7 @@ const expenseSchema = new mongoose.Schema({
 // Optimize for financial reporting
 expenseSchema.index({ date: 1 });
 expenseSchema.index({ category: 1 });
+expenseSchema.index({ supplierName: 1 });
+expenseSchema.index({ id: 1 });
 
 export default mongoose.model('Expense', expenseSchema);

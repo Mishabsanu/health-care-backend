@@ -101,10 +101,8 @@ export const createInvoice = async (req, res) => {
     }
 
     // 1. Generate Clinical Bill ID (Simplified Registry Number)
-    const lastBill = await Invoice.findOne().sort({ createdAt: -1 });
-    const count = lastBill ? await Invoice.countDocuments() : 0;
-    const year = new Date().getFullYear();
-    const billNo = `BILL-${year}-${(count + 1).toString().padStart(4, '0')}`;
+    const count = await Invoice.countDocuments();
+    const billNo = `INV-${1000 + count + 1}`;
 
     // 2. Clinical Validation | Ensure Ledger Integrity
     if (!items || !Array.isArray(items) || items.length === 0) {
@@ -123,6 +121,16 @@ export const createInvoice = async (req, res) => {
     // 3. Financial Calculations & Sanitization
     const subtotal = items.reduce((sum, item) => sum + (item.price * (item.quantity || 1)), 0);
     const amount = (subtotal - discount) + tax;
+    const paidAmount = Number(req.body.paidAmount) || 0;
+    const balanceAmount = amount - paidAmount;
+    
+    // Auto-update status based on clinical threshold
+    let status = req.body.status || 'Unpaid';
+    if (paidAmount >= amount) {
+      status = 'Paid';
+    } else if (paidAmount > 0) {
+      status = 'Partially Paid';
+    }
 
     const sanitizedItems = items?.map(item => ({
       ...item,
@@ -138,6 +146,9 @@ export const createInvoice = async (req, res) => {
       items: sanitizedItems,
       subtotal,
       amount,
+      paidAmount,
+      balanceAmount,
+      status,
       createdBy: req.user?.id
     };
 
@@ -180,10 +191,29 @@ export const createInvoice = async (req, res) => {
 // @route   PUT /api/invoices/:id
 export const updateInvoice = async (req, res) => {
   try {
-    const invoice = await Invoice.findByIdAndUpdate(req.params.id, req.body, { new: true })
+    const existing = await Invoice.findById(req.params.id);
+    if (!existing) return res.status(404).json({ message: '🚫 Invoice Not Found.' });
+
+    const updateData = { ...req.body };
+
+    // If updating payment, recalculate balance and status
+    if (typeof req.body.paidAmount !== 'undefined') {
+      const amount = updateData.amount || existing.amount;
+      const paid = updateData.paidAmount;
+      updateData.balanceAmount = amount - paid;
+      
+      if (paid >= amount) {
+        updateData.status = 'Paid';
+      } else if (paid > 0) {
+        updateData.status = 'Partially Paid';
+      } else {
+        updateData.status = 'Unpaid';
+      }
+    }
+
+    const invoice = await Invoice.findByIdAndUpdate(req.params.id, updateData, { new: true })
       .populate('patientId', 'name')
       .populate('createdBy', 'name');
-    if (!invoice) return res.status(404).json({ message: '🚫 Invoice Not Found.' });
     res.json(invoice);
   } catch (err) {
     res.status(400).json({ message: '🚫 Financial Error | Modification failed.' });

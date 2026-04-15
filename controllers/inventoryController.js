@@ -1,4 +1,5 @@
 import Inventory from '../models/Inventory.js';
+import StockLog from '../models/StockLog.js';
 
 // @desc    Retrieve Clinical Inventory
 // @route   GET /api/inventory
@@ -114,8 +115,69 @@ export const updateInventoryItem = async (req, res) => {
 export const deleteInventoryItem = async (req, res) => {
   try {
     await Inventory.findByIdAndDelete(req.params.id);
+    await StockLog.deleteMany({ productId: req.params.id }); // Clean logs
     res.json({ message: '🛡️ Inventory Record Cleared.' });
   } catch (err) {
     res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Restock Inventory Item
+// @route   POST /api/inventory/:id/restock
+export const restockInventoryItem = async (req, res) => {
+  try {
+    const { quantityAdded, supplierName, purchasePrice, salePrice } = req.body;
+    const { id } = req.params;
+
+    const item = await Inventory.findById(id);
+    if (!item) return res.status(404).json({ message: '🚫 Item Not Found.' });
+
+    // 1. Create Stock Log
+    const log = await StockLog.create({
+      productId: id,
+      quantityAdded,
+      supplierName,
+      purchasePrice,
+      salePrice,
+      createdBy: req.user?.id
+    });
+
+    // 2. Update Inventory Master
+    item.quantity += Number(quantityAdded);
+    item.supplier = supplierName;
+    item.purchasePrice = purchasePrice;
+    item.salePrice = salePrice;
+    item.lastRestocked = new Date();
+    
+    await item.save();
+
+    res.status(201).json({ item, log });
+  } catch (err) {
+    console.error('🚫 Restock Error:', err);
+    res.status(400).json({ message: '🚫 Operational Error | Restock failed.' });
+  }
+};
+
+// @desc    Retrieve Stock Logs for an Item
+// @route   GET /api/inventory/:id/logs
+export const getInventoryLogs = async (req, res) => {
+  try {
+    const logs = await StockLog.find({ productId: req.params.id })
+      .populate('createdBy', 'name')
+      .sort({ createdAt: -1 });
+    res.json(logs);
+  } catch (err) {
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+};
+
+// @desc    Retrieve Unique Suppliers for Suggestions
+// @route   GET /api/inventory/suppliers/unique
+export const getUniqueSuppliers = async (req, res) => {
+  try {
+    const suppliers = await StockLog.distinct('supplierName');
+    res.json(suppliers);
+  } catch (err) {
+    res.status(500).json({ message: 'Internal Server Error' });
   }
 };
