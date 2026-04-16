@@ -34,7 +34,9 @@ export const getAppointments = async (req, res) => {
       { $lookup: { from: 'doctors', localField: 'doctorId', foreignField: '_id', as: 'd' } },
       { $unwind: { path: '$d', preserveNullAndEmptyArrays: true } },
       { $lookup: { from: 'users', localField: 'createdBy', foreignField: '_id', as: 'u' } },
-      { $unwind: { path: '$u', preserveNullAndEmptyArrays: true } }
+      { $unwind: { path: '$u', preserveNullAndEmptyArrays: true } },
+      { $lookup: { from: 'invoices', localField: 'billId', foreignField: '_id', as: 'inv' } },
+      { $unwind: { path: '$inv', preserveNullAndEmptyArrays: true } }
     ];
 
     // 🔍 Stage 2: Advanced Search (Related Collections)
@@ -67,6 +69,7 @@ export const getAppointments = async (req, res) => {
               status: 1,
               isBilled: 1,
               billId: 1,
+              billStatus: '$inv.status',
               createdAt: 1,
               patientId: {
                 _id: '$p._id',

@@ -4,11 +4,12 @@ import Expense from '../models/Expense.js';
 // @route   GET /api/expenses
 export const getExpenses = async (req, res) => {
   try {
-    const { search, category, startDate, endDate, page = 1, limit = 10, status } = req.query;
+    const { search, category, startDate, endDate, page = 1, limit = 10, status, staffId } = req.query;
     let query = {};
 
     if (category) query.category = category;
     if (status) query.status = status;
+    if (staffId) query.staffId = staffId;
     if (startDate || endDate) {
       query.date = {};
       if (startDate) query.date.$gte = startDate;
@@ -39,7 +40,7 @@ export const getExpenses = async (req, res) => {
       pages: Math.ceil(total / parseInt(limit))
     });
   } catch (err) {
-    console.error('🚫 Registry Error | Backend Fetch:', err);
+    console.error('Registry Error | Backend Fetch:', err);
     res.status(500).json({ message: 'Internal Server Error' });
   }
 };
@@ -50,7 +51,7 @@ export const getExpense = async (req, res) => {
   try {
     const expense = await Expense.findById(req.params.id);
 
-    if (!expense) return res.status(404).json({ message: '🚫 Expense Not Found.' });
+    if (!expense) return res.status(404).json({ message: 'Expense Not Found.' });
     res.json(expense);
   } catch (err) {
     res.status(500).json({ message: 'Internal Server Error' });
@@ -77,8 +78,8 @@ export const createExpense = async (req, res) => {
     console.error('❌ Expense Registry Error:', err);
     res.status(400).json({
       message: err.name === 'ValidationError'
-        ? `🚫 Validation Error | ${Object.values(err.errors)?.map(e => e.message).join(', ')}`
-        : '🚫 Operational Error | Registry failed.'
+        ? `Validation Error | ${Object.values(err.errors)?.map(e => e.message).join(', ')}`
+        : 'Operational Error | Registry failed.'
     });
   }
 };
@@ -88,10 +89,10 @@ export const createExpense = async (req, res) => {
 export const updateExpense = async (req, res) => {
   try {
     const expense = await Expense.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    if (!expense) return res.status(404).json({ message: '🚫 Expense Not Found.' });
+    if (!expense) return res.status(404).json({ message: 'Expense Not Found.' });
     res.json(expense);
   } catch (err) {
-    res.status(400).json({ message: '🚫 Operational Error | Modification failed.' });
+    res.status(400).json({ message: 'Operational Error | Modification failed.' });
   }
 };
 
