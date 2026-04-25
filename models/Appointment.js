@@ -9,7 +9,7 @@ const appointmentSchema = new mongoose.Schema({
   time: { type: String }, // HH:mm (Optional)
   serviceId: { type: mongoose.Schema.Types.ObjectId, ref: 'Service' },
   type: { type: String }, // General session type
-  status: { type: String, enum: ['Scheduled', 'Confirmed', 'Completed', 'Cancelled'], default: 'Scheduled' },
+  status: { type: String, enum: ['Scheduled', 'Queued', 'Confirmed', 'Completed', 'Cancelled'], default: 'Scheduled' },
   isBilled: { type: Boolean, default: false },
   billId: { type: mongoose.Schema.Types.ObjectId, ref: 'Invoice' },
   description: { type: String },

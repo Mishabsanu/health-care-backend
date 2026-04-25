@@ -1,4 +1,5 @@
 import Patient from '../models/Patient.js';
+import Appointment from '../models/Appointment.js';
 import { sendWhatsAppMessage } from '../services/whatsappService.js';
 
 // @desc    Retrieve Clinical Patients
@@ -46,6 +47,13 @@ export const getPatients = async (req, res) => {
 export const getPatientsDropdown = async (req, res) => {
     try {
         let query = {};
+        if (req.query.billingEligible === 'true') {
+            const eligiblePatientIds = await Appointment.distinct('patientId', {
+                status: 'Completed',
+                isBilled: false
+            });
+            query._id = { $in: eligiblePatientIds };
+        }
         const patients = await Patient.find(query).select('name _id patientId phone').sort({ name: 1 });
         res.json(patients);
     } catch (err) {

@@ -1,12 +1,21 @@
 import mongoose from 'mongoose';
 import Service from '../models/Service.js';
+import Inventory from '../models/Inventory.js';
 
 // @desc    Get all clinical services
 // @route   GET /api/services
 export const getServices = async (req, res) => {
   try {
     const { search, category, page = 1, limit = 10, status } = req.query;
-    const query = { status: status || { $ne: 'Archived' } };
+    
+    // Fetch all inventory names to exclude them from services
+    const inventoryItems = await Inventory.find({}).select('name');
+    const inventoryNames = inventoryItems.map(item => item.name);
+
+    const query = { 
+      status: status || { $ne: 'Archived' },
+      name: { $nin: inventoryNames }
+    };
     
     if (category) query.category = category;
 
@@ -32,6 +41,7 @@ export const getServices = async (req, res) => {
     });
   } catch (err) {
     console.error('🚫 Registry Error | Backend Fetch:', err);
+    res.status(500).json({ message: 'Internal Server Error' });
   }
 };
 
@@ -39,7 +49,13 @@ export const getServices = async (req, res) => {
 // @route   GET /api/services/dropdown
 export const getServicesDropdown = async (req, res) => {
     try {
-        const services = await Service.find({ status: { $ne: 'Archived' } })
+        const inventoryItems = await Inventory.find({}).select('name');
+        const inventoryNames = inventoryItems.map(item => item.name);
+
+        const services = await Service.find({ 
+          status: { $ne: 'Archived' },
+          name: { $nin: inventoryNames }
+        })
             .select('name _id price category')
             .sort({ name: 1 });
         res.json(services);

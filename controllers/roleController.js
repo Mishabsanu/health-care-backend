@@ -74,6 +74,7 @@ export const createRole = async (req, res) => {
       name,
       description,
       permissions,
+      allAccess: req.body.allAccess || false,
       createdBy: req.user?.id
     });
     res.status(201).json(role);

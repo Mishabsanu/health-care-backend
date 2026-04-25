@@ -7,13 +7,20 @@ import { sendWhatsAppMessage } from '../services/whatsappService.js';
 // @route   GET /api/appointments
 export const getAppointments = async (req, res) => {
   try {
-    const { search, page = 1, limit = 10, status, date, timeframe, localDate } = req.query;
+    const { search, page = 1, limit = 10, status, date, timeframe, localDate, createdBy, patientId, isBilled } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const limitInt = parseInt(limit);
 
     // 🎯 Stage 1: Initial Match (Clinical Timeframes)
     let initialMatch = {};
     if (status) initialMatch.status = status;
+    if (createdBy) initialMatch.createdBy = new mongoose.Types.ObjectId(createdBy);
+    if (patientId && mongoose.Types.ObjectId.isValid(patientId)) {
+      initialMatch.patientId = new mongoose.Types.ObjectId(patientId);
+    }
+    if (typeof isBilled !== 'undefined') {
+      initialMatch.isBilled = isBilled === 'true';
+    }
     
     // 🌐 Multi-Timezone Clinical Sync: Prioritize station date over server date
     const todayStr = localDate || new Date().toISOString().split('T')[0];

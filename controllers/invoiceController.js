@@ -7,11 +7,12 @@ import Appointment from '../models/Appointment.js';
 // @route   GET /api/invoices
 export const getInvoices = async (req, res) => {
   try {
-    const { search, page = 1, limit = 10, status } = req.query;
+    const { search, page = 1, limit = 10, status, date } = req.query;
     // Base query
     let query = {};
 
     if (status) query.status = status;
+    if (date) query.date = date;
 
     let aggregateQuery = [
       { $match: query },
@@ -92,12 +93,31 @@ export const createInvoice = async (req, res) => {
   try {
     const { items, discount = 0, tax = 0, appointmentId } = req.body;
 
-    // 🎯 Step 0: Appointment Validation | Prevent Double Billing
-    if (appointmentId) {
-      const existingBill = await Invoice.findOne({ appointmentId });
-      if (existingBill) {
-        return res.status(400).json({ message: '🚫 Financial Error | This appointment already has a registered bill.' });
-      }
+    // Billing is allowed only after a completed, unbilled appointment session.
+    if (!appointmentId || !mongoose.Types.ObjectId.isValid(appointmentId)) {
+      return res.status(400).json({ message: 'Financial Error | Please complete an appointment session before generating a bill.' });
+    }
+
+    const appointment = await Appointment.findById(appointmentId);
+    if (!appointment) {
+      return res.status(404).json({ message: 'Financial Error | Appointment session not found.' });
+    }
+
+    if (String(appointment.patientId) !== String(req.body.patientId)) {
+      return res.status(400).json({ message: 'Financial Error | Selected patient does not match the appointment session.' });
+    }
+
+    if (appointment.status !== 'Completed') {
+      return res.status(400).json({ message: 'Financial Error | Bill can be generated only after appointment session is completed.' });
+    }
+
+    if (appointment.isBilled) {
+      return res.status(400).json({ message: 'Financial Error | This appointment already has a registered bill.' });
+    }
+
+    const existingBill = await Invoice.findOne({ appointmentId });
+    if (existingBill) {
+      return res.status(400).json({ message: 'Financial Error | This appointment already has a registered bill.' });
     }
 
     // 1. Generate Clinical Bill ID (Simplified Registry Number)
@@ -241,7 +261,7 @@ export const updateInvoice = async (req, res) => {
     }
 
     const invoice = await Invoice.findByIdAndUpdate(req.params.id, updateData, { new: true })
-      .populate('patientId', 'name')
+      .populate('patientId', 'name phone patientId')
       .populate('createdBy', 'name');
     res.json(invoice);
   } catch (err) {
@@ -286,7 +306,11 @@ export const recordPayment = async (req, res) => {
 
     await invoice.save();
 
-    res.json(invoice);
+    const populatedInvoice = await Invoice.findById(invoice._id)
+      .populate('patientId', 'name phone patientId')
+      .populate('createdBy', 'name');
+
+    res.json(populatedInvoice);
   } catch (err) {
     console.error('🚫 Ledger Error | Payment Entry Failed:', err);
     res.status(400).json({ message: '🚫 Financial Error | Payment could not be recorded.' });

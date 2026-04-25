@@ -27,6 +27,14 @@ export const getExpenses = async (req, res) => {
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const total = await Expense.countDocuments(query);
+    
+    // Calculate Total Amount for current filters
+    const totalAmountResult = await Expense.aggregate([
+      { $match: query },
+      { $group: { _id: null, total: { $sum: "$amount" } } }
+    ]);
+    const totalAmount = totalAmountResult.length > 0 ? totalAmountResult[0].total : 0;
+
     const expenses = await Expense.find(query)
         .populate('createdBy', 'name')
       .sort({ createdAt: -1 })
@@ -36,6 +44,7 @@ export const getExpenses = async (req, res) => {
     res.json({
       data: expenses,
       total,
+      totalAmount,
       page: parseInt(page),
       pages: Math.ceil(total / parseInt(limit))
     });

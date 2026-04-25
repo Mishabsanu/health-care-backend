@@ -71,7 +71,7 @@ export const getUser = async (req, res) => {
 export const updateUser = async (req, res) => {
   try {
     const { 
-        name, email, role, status,
+        name, phone, email, role, status,
         panCard, adharCard, accountNumber, ifscCode, bankName, joinDate,
         salaryDetails, salaryConfig
     } = req.body;
@@ -83,7 +83,7 @@ export const updateUser = async (req, res) => {
     }
     
     const updateData = { 
-        name, email, role, status,
+        name, phone, email, role, status,
         panCard, adharCard, accountNumber, ifscCode, bankName, joinDate,
         salaryDetails: salaryDetails ? { ...salaryDetails, netSalary } : undefined,
         salaryConfig
